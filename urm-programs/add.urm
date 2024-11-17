@@ -1,0 +1,6 @@
+in(R1, R2)
+if R2 == 0 goto 5;
+R2--;
+R1++;
+goto 1;
+out(R1)

@@ -1,0 +1,15 @@
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
+
+program       = { (WHITESPACE)* ~ input_decl ~ statement+ ~ output_decl ~ (WHITESPACE)* }
+input_decl    = { "in(" ~ register ~ ("," ~ register)* ~ ")" }
+output_decl   = { "out(" ~ register ~ ")" }
+statement     = { increment | decrement | reset | conditional_eq | conditional_neq | goto }
+increment     = { register ~ "++;" }
+decrement     = { register ~ "--;" }
+reset         = { register ~ "=" ~ "0;" }
+conditional_eq = { "if" ~ register ~ "==" ~ "0" ~ "goto" ~ number ~ ";" }
+conditional_neq = { "if" ~ register ~ "!=" ~ "0" ~ "goto" ~ number ~ ";" }
+goto          = { "goto" ~ number ~ ";" }
+register      = { alpha ~ (ASCII_ALPHANUMERIC)* }
+alpha = { 'a'..'z' | 'A'..'Z' }
+number        = { ASCII_DIGIT+ }

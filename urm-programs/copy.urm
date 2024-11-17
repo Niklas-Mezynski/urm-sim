@@ -1,0 +1,12 @@
+in(x, y)
+x = 0;
+if y == 0 goto 6;
+y--;
+z++;
+goto 2;
+if z == 0 goto 11;
+z--;
+x++;
+y++;
+goto 6;
+out(x)
