@@ -1,8 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use indexmap::IndexMap;
 
-use crate::debug;
 use crate::debug::run_with_debug;
 use crate::instructions::*;
 
@@ -17,14 +16,9 @@ pub fn simulate_urm(program: &Program, input: Vec<usize>, debug: bool) -> usize 
         }
     }
 
-    println!("Running program with input: {:?}", input);
-    println!("Input registers: {:?}", program.input_registers);
-
     // Initialize registers
     let mut registers: IndexMap<String, usize> =
         program.input_registers.iter().cloned().zip(input).collect();
-
-    println!("Initial registers: {:?}", registers);
 
     // Initialize program counter
     let mut pc: usize = 1;

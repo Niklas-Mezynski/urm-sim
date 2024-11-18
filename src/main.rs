@@ -51,5 +51,5 @@ fn parse_and_execute(urm_code: &str, input: Vec<usize>, debug: bool) {
 
     let program_result = simulator::simulate_urm(&program, input, debug);
 
-    println!("Program result: {}", program_result);
+    println!("{}", program_result);
 }
