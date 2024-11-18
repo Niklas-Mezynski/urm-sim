@@ -10,6 +10,6 @@ reset         = { register ~ "=" ~ "0;" }
 conditional_eq = { "if" ~ register ~ "==" ~ "0" ~ "goto" ~ number ~ ";" }
 conditional_neq = { "if" ~ register ~ "!=" ~ "0" ~ "goto" ~ number ~ ";" }
 goto          = { "goto" ~ number ~ ";" }
-register      = { alpha ~ (ASCII_ALPHANUMERIC)* }
+register      = @{ alpha ~ (ASCII_ALPHANUMERIC)* }
 alpha = { 'a'..'z' | 'A'..'Z' }
 number        = { ASCII_DIGIT+ }

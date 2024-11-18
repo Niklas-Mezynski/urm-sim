@@ -25,6 +25,33 @@ pub enum Statement {
     },
 }
 
+impl Statement {
+    pub fn to_string(&self, instr_number: usize) -> String {
+        match self {
+            Statement::ConditionalGoto {
+                register,
+                condition,
+                target,
+            } => format!(
+                "{}: if {} {} 0 goto {};",
+                instr_number,
+                register,
+                match condition {
+                    Condition::Equal => "==",
+                    Condition::NotEqual => "!=",
+                },
+                target
+            ),
+            Statement::Increment { register } => format!("{}: {}++;", instr_number, register),
+            Statement::Decrement { register } => format!("{}: {}--;", instr_number, register),
+            Statement::ZeroAssignment { register } => {
+                format!("{}: {} = 0;", instr_number, register)
+            }
+            Statement::Goto { target } => format!("{}: goto {};", instr_number, target),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Program {
     pub input_registers: Vec<String>,

@@ -1,8 +1,12 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
+use indexmap::IndexMap;
+
+use crate::debug;
+use crate::debug::run_with_debug;
 use crate::instructions::*;
 
-pub fn simulate_urm(program: &Program, input: Vec<usize>) -> usize {
+pub fn simulate_urm(program: &Program, input: Vec<usize>, debug: bool) -> usize {
     // Run static analysis
     match run_static_analysis(program, input.clone()) {
         Ok(_) => {}
@@ -13,85 +17,101 @@ pub fn simulate_urm(program: &Program, input: Vec<usize>) -> usize {
         }
     }
 
+    println!("Running program with input: {:?}", input);
+    println!("Input registers: {:?}", program.input_registers);
+
     // Initialize registers
-    let mut registers: std::collections::HashMap<String, usize> =
+    let mut registers: IndexMap<String, usize> =
         program.input_registers.iter().cloned().zip(input).collect();
+
+    println!("Initial registers: {:?}", registers);
 
     // Initialize program counter
     let mut pc: usize = 1;
 
     // Run the program
-    loop {
-        // Fetch the current statement
-        let statement = match program.statements.get(pc - 1) {
-            Some(statement) => statement,
-            None => {
-                eprintln!("Program counter out of bounds: {}", pc);
-                std::process::exit(1);
-            }
-        };
+    match debug {
+        true => run_with_debug(program, &mut registers, &mut pc),
+        false => run_without_debug(program, &mut registers, &mut pc),
+    };
 
-        // Execute the statement
-        match statement {
-            Statement::Increment { register } => {
-                let value = registers.get(register).unwrap_or(&0) + 1;
-                registers.insert(register.clone(), value);
-                pc += 1;
-            }
-            Statement::Decrement { register } => {
-                let value = registers
-                    .get(register)
-                    .unwrap_or(&0)
-                    .checked_sub(1)
-                    .unwrap_or(0);
-                registers.insert(register.clone(), value);
-                pc += 1;
-            }
-            Statement::ZeroAssignment { register } => {
-                registers.insert(register.clone(), 0);
-                pc += 1;
-            }
-            Statement::ConditionalGoto {
-                register,
-                condition,
-                target,
-            } => {
-                let value = registers.get(register).unwrap_or(&0);
-                let target_pc = *target;
-                let new_pc = match condition {
-                    Condition::Equal => {
-                        if value == &0 {
-                            target_pc
-                        } else {
-                            pc + 1
-                        }
-                    }
-                    Condition::NotEqual => {
-                        if value != &0 {
-                            target_pc
-                        } else {
-                            pc + 1
-                        }
-                    }
-                };
-                pc = new_pc;
-            }
-            Statement::Goto { target } => {
-                pc = *target;
-            }
-        }
+    // Output the result
+    let output_register = &program.output_register;
+    let output_value = registers.get(output_register).unwrap_or(&0);
+
+    *output_value
+}
+
+pub fn run_without_debug(
+    program: &Program,
+    registers: &mut IndexMap<String, usize>,
+    pc: &mut usize,
+) {
+    // Run the program
+    loop {
+        execute_statement(&program.statements[*pc - 1], registers, pc);
 
         // Check if the program has terminated
-        if pc > program.statements.len() {
+        if *pc > program.statements.len() {
             break;
         }
     }
+}
 
-    // Output the result
-    let output_register = program.output_register.clone();
-    let output_value = registers.get(&output_register).unwrap_or(&0);
-
-    *output_value
+pub fn execute_statement(
+    statement: &Statement,
+    registers: &mut IndexMap<String, usize>,
+    pc: &mut usize,
+) {
+    // Execute the statement
+    match statement {
+        Statement::Increment { register } => {
+            let value = registers.get(register).unwrap_or(&0) + 1;
+            registers.insert(register.clone(), value);
+            *pc += 1;
+        }
+        Statement::Decrement { register } => {
+            let value = registers
+                .get(register)
+                .unwrap_or(&0)
+                .checked_sub(1)
+                .unwrap_or(0);
+            registers.insert(register.clone(), value);
+            *pc += 1;
+        }
+        Statement::ZeroAssignment { register } => {
+            registers.insert(register.clone(), 0);
+            *pc += 1;
+        }
+        Statement::ConditionalGoto {
+            register,
+            condition,
+            target,
+        } => {
+            let value = registers.get(register).unwrap_or(&0);
+            let target_pc = *target;
+            let new_pc = match condition {
+                Condition::Equal => {
+                    if value == &0 {
+                        target_pc
+                    } else {
+                        *pc + 1
+                    }
+                }
+                Condition::NotEqual => {
+                    if value != &0 {
+                        target_pc
+                    } else {
+                        *pc + 1
+                    }
+                }
+            };
+            *pc = new_pc;
+        }
+        Statement::Goto { target } => {
+            *pc = *target;
+        }
+    }
 }
 
 pub fn run_static_analysis(program: &Program, input: Vec<usize>) -> Result<(), String> {

@@ -1,10 +1,14 @@
 use clap::Parser;
 
+pub mod debug;
 pub mod instructions;
 pub mod parser;
 pub mod simulator;
 
 /// URM code parser and interpreter
+///
+/// This program reads a URM program from a file and executes it with the given input values.
+/// Activate the debug mode to print the program's execution steps and registers.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -15,6 +19,10 @@ struct Args {
     /// Values for the input registers
     #[arg(index = 2)]
     inputs: Vec<usize>,
+
+    /// Activate debug mode
+    #[arg(short, long)]
+    debug: bool,
 }
 
 fn main() {
@@ -29,10 +37,10 @@ fn main() {
         }
     };
 
-    parse_and_execute(urm_code.as_str(), args.inputs);
+    parse_and_execute(urm_code.as_str(), args.inputs, args.debug);
 }
 
-fn parse_and_execute(urm_code: &str, input: Vec<usize>) {
+fn parse_and_execute(urm_code: &str, input: Vec<usize>, debug: bool) {
     let program = match parser::parse_urm_code(urm_code) {
         Ok(program) => program,
         Err(e) => {
@@ -41,7 +49,7 @@ fn parse_and_execute(urm_code: &str, input: Vec<usize>) {
         }
     };
 
-    let program_result = simulator::simulate_urm(&program, input);
+    let program_result = simulator::simulate_urm(&program, input, debug);
 
     println!("Program result: {}", program_result);
 }
