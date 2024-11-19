@@ -1,5 +1,3 @@
-Here's a README for the URM (Unlimited Register Machine) simulator project:
-
 # URM Simulator in Rust
 
 A simulator for Unlimited Register Machine (URM) programs, implemented in Rust.
