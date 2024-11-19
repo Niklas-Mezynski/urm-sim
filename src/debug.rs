@@ -44,7 +44,9 @@ pub fn run_with_debug(program: &Program, registers: &mut IndexMap<String, usize>
         print_tooltip(&mut stdout, &debug_state);
         stdout.flush().unwrap();
 
-        get_input(&mut debug_state);
+        if let ControlFlow::Break(_) = get_input(&mut debug_state) {
+            break;
+        }
 
         match debug_state {
             DebugMode::Auto { timeout } => {
@@ -74,6 +76,8 @@ pub fn run_with_debug(program: &Program, registers: &mut IndexMap<String, usize>
     }
 
     disable_raw_mode().unwrap();
+    stdout.execute(cursor::MoveToNextLine(1)).unwrap();
+    stdout.flush().unwrap();
     println!();
 }
 
@@ -154,10 +158,10 @@ impl DebugMode {
             DebugMode::Auto { timeout } => match key {
                 KeyCode::Char('m') => *self = DebugMode::Manual { step: false },
                 KeyCode::Char('j') => {
-                    *timeout = timeout.saturating_add(100);
+                    *timeout = timeout.saturating_add(100).min(100000);
                 }
                 KeyCode::Char('k') => {
-                    *timeout = timeout.saturating_sub(100);
+                    *timeout = timeout.saturating_sub(100).max(10);
                 }
                 _ => {}
             },
@@ -176,19 +180,23 @@ impl DebugMode {
     }
 }
 
-fn get_input(debug_state: &mut DebugMode) {
-    let key_polling_timeout = if let DebugMode::Auto { timeout } = debug_state {
-        *timeout
-    } else {
-        100
-    };
+fn get_input(debug_state: &mut DebugMode) -> ControlFlow<()> {
+    if !event::poll(Duration::from_millis(10)).unwrap() {
+        return ControlFlow::Continue(());
+    }
 
-    if event::poll(Duration::from_millis(key_polling_timeout)).unwrap() {
-        if let Event::Key(key_event) = event::read().unwrap() {
-            match key_event.code {
-                KeyCode::Esc => std::process::exit(0),
-                _ => debug_state.handle_key(key_event.code),
+    if let Event::Key(key_event) = event::read().unwrap() {
+        match key_event.code {
+            KeyCode::Esc => ControlFlow::Break(()),
+            KeyCode::Char('c') if key_event.modifiers.contains(event::KeyModifiers::CONTROL) => {
+                ControlFlow::Break(())
+            }
+            code => {
+                debug_state.handle_key(code);
+                ControlFlow::Continue(())
             }
         }
+    } else {
+        ControlFlow::Continue(())
     }
 }
