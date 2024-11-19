@@ -118,13 +118,25 @@ fn print_registers_state(registers: &IndexMap<String, usize>, stdout: &mut std::
 }
 
 fn print_current_instruction(program: &Program, pc: usize, stdout: &mut std::io::Stdout) {
-    write!(stdout, "Instruction:\n\r").unwrap();
-    stdout
-        .execute(PrintStyledContent(
-            program.statements[pc - 1].to_string(pc - 1).blue(),
-        ))
-        .unwrap();
-    write!(stdout, "\n\r").unwrap();
+    // Get n instructions before and after the current instruction (if possible)
+    // to print a context around the current instruction
+    let context = 2;
+    let start = (pc as i32 - context - 1).max(0) as usize;
+    let end = (pc + context as usize).min(program.statements.len());
+
+    write!(stdout, "Instructions:\n\r").unwrap();
+    for (i, statement) in program.statements[start..end].iter().enumerate() {
+        let instr_number = start + i + 1;
+        let instr_str = statement.to_string(instr_number);
+        if instr_number == pc {
+            stdout
+                .execute(PrintStyledContent(format!("-> {}", instr_str).blue()))
+                .unwrap();
+        } else {
+            write!(stdout, "   {}", instr_str).unwrap();
+        }
+        write!(stdout, "\n\r").unwrap();
+    }
 }
 
 fn print_tooltip(stdout: &mut std::io::Stdout, debug_state: &DebugMode) {
