@@ -97,11 +97,10 @@ fn execute_next_statement(
 }
 
 fn print_debug_header(count: &usize, stdout: &mut std::io::Stdout) {
-    write!(stdout, "\n\r").unwrap();
     write!(stdout, "URM Debugger (step {})\n\r", count).unwrap();
     stdout
         .execute(PrintStyledContent(
-            "============\n\r\n\r".to_string().grey(),
+            "=======================\n\r\n\r".to_string().grey(),
         ))
         .unwrap();
 }
