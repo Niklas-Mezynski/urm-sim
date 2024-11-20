@@ -25,7 +25,7 @@ pub fn simulate_urm(program: &Program, input: Vec<usize>, debug: bool) -> usize 
 
     // Run the program
     match debug {
-        true => run_with_debug(program, &mut registers, &mut pc),
+        true => run_with_debug(program, &mut registers, &mut pc).unwrap(),
         false => run_without_debug(program, &mut registers, &mut pc),
     };
 
