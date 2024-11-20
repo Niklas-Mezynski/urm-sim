@@ -55,11 +55,6 @@ pub fn run_with_debug(
         // Flush all buffered operations at once
         stdout.flush()?;
 
-        // Handle input with proper event filtering
-        if let ControlFlow::Break(_) = handle_input(&mut debug_state)? {
-            break;
-        }
-
         // Process debug state
         match debug_state {
             DebugMode::Auto { timeout } => {
@@ -82,6 +77,11 @@ pub fn run_with_debug(
                     }
                 }
             }
+        }
+
+        // Handle input with proper event filtering
+        if let ControlFlow::Break(_) = handle_input(&mut debug_state)? {
+            break;
         }
     }
 
