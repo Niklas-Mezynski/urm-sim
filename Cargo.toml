@@ -8,14 +8,7 @@ repository = "https://github.com/Niklas-Mezynski/urm-sim"
 homepage = "https://github.com/Niklas-Mezynski/urm-sim"
 documentation = "https://docs.rs/urm-sim"
 readme = "README.md"
-keywords = [
-    "urm",
-    "interpreter",
-    "simulator",
-    "theoretical-cs",
-    "computation",
-    "unlimited-register-machine",
-]
+keywords = ["urm", "interpreter", "simulator", "theoretical-cs", "computation"]
 categories = [
     "command-line-utilities",
     "development-tools",
