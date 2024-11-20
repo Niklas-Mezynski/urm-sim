@@ -11,7 +11,7 @@ use indexmap::IndexMap;
 use std::io::Write;
 use std::{io::stdout, ops::ControlFlow, time::Duration};
 
-const DEFAULT_TIMEOUT_MILLIS: u64 = 1500;
+const DEFAULT_TIMEOUT_MILLIS: u64 = 2000;
 
 #[derive(Debug)]
 pub enum DebugMode {
@@ -146,12 +146,18 @@ fn print_tooltip(stdout: &mut std::io::Stdout, debug_state: &DebugMode) {
         DebugMode::Auto { timeout } => {
             stdout
                 .execute(PrintStyledContent(
-                    format!("Auto mode (speed: {} ms per instruction)\n\r", timeout).green(),
+                    format!(
+                        "Auto mode [speed: {} instructions/s ({} ms/instruction)]\n\r",
+                        // Round to max 2 decimal places
+                        (1000_f64 / (*timeout as f64) * 100.0).round() / 100.0,
+                        timeout
+                    )
+                    .green(),
                 ))
                 .unwrap();
             write!(stdout, "- 'm' to switch to manual mode\n\r").unwrap();
-            write!(stdout, "- 'j' to decrease speed\n\r").unwrap();
-            write!(stdout, "- 'k' to increase speed\n\r").unwrap();
+            write!(stdout, "- 'j' | '↓' to decrease speed\n\r").unwrap();
+            write!(stdout, "- 'k' | '↑' to increase speed\n\r").unwrap();
         }
         DebugMode::Manual { step: _ } => {
             stdout
@@ -169,11 +175,22 @@ impl DebugMode {
         match self {
             DebugMode::Auto { timeout } => match key {
                 KeyCode::Char('m') => *self = DebugMode::Manual { step: false },
-                KeyCode::Char('j') => {
-                    *timeout = timeout.saturating_add(100).min(100000);
+                // Decrease speed (increase timeout)
+                KeyCode::Char('j') | KeyCode::Down => {
+                    let multiplier = f64::log10(*timeout as f64).floor() as u64;
+
+                    let scaling = u64::pow(10, multiplier as u32);
+
+                    *timeout = timeout.saturating_add(scaling).min(100000);
                 }
-                KeyCode::Char('k') => {
-                    *timeout = timeout.saturating_sub(100).max(10);
+                // Increase speed (decrease timeout)
+                KeyCode::Char('k') | KeyCode::Up => {
+                    let multiplier =
+                        f64::log10(*timeout as f64 - f64::log10(*timeout as f64)).floor() as u64;
+
+                    let scaling = u64::pow(10, multiplier as u32);
+
+                    *timeout = timeout.saturating_sub(scaling).max(1);
                 }
                 _ => {}
             },
@@ -193,7 +210,12 @@ impl DebugMode {
 }
 
 fn get_input(debug_state: &mut DebugMode) -> ControlFlow<()> {
-    if !event::poll(Duration::from_millis(10)).unwrap() {
+    let timeout_millis = match debug_state {
+        DebugMode::Auto { timeout } => *timeout,
+        DebugMode::Manual { step: _ } => 1000,
+    };
+
+    if !event::poll(Duration::from_millis(timeout_millis)).unwrap() {
         return ControlFlow::Continue(());
     }
 
