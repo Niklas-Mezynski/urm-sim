@@ -5,7 +5,7 @@ use crossterm::{
     execute,
     style::{PrintStyledContent, Stylize},
     terminal::{self, disable_raw_mode, enable_raw_mode, Clear, ClearType},
-    ExecutableCommand, QueueableCommand,
+    QueueableCommand,
 };
 use indexmap::IndexMap;
 use std::io::Write;
@@ -28,7 +28,7 @@ pub fn run_with_debug(
     let mut last_execution = std::time::Instant::now();
     let mut debug_state = DebugMode::Manual { step: false };
 
-    // Setup terminal
+    // Raw mode to handle key presses immediately
     enable_raw_mode()?;
     let mut stdout = stdout();
 
@@ -46,7 +46,6 @@ pub fn run_with_debug(
             .queue(cursor::MoveTo(0, 0))?
             .queue(Clear(ClearType::All))?;
 
-        // Draw UI elements
         draw_debug_header(&count, &mut stdout)?;
         draw_registers_state(registers, &mut stdout)?;
         draw_current_instruction(program, *pc, &mut stdout)?;
@@ -55,7 +54,6 @@ pub fn run_with_debug(
         // Flush all buffered operations at once
         stdout.flush()?;
 
-        // Process debug state
         match debug_state {
             DebugMode::Auto { timeout } => {
                 if last_execution.elapsed() >= Duration::from_millis(timeout) {
@@ -79,7 +77,6 @@ pub fn run_with_debug(
             }
         }
 
-        // Handle input with proper event filtering
         if let ControlFlow::Break(_) = handle_input(&mut debug_state)? {
             break;
         }
@@ -95,7 +92,7 @@ pub fn run_with_debug(
 fn handle_input(debug_state: &mut DebugMode) -> std::io::Result<ControlFlow<()>> {
     let timeout_millis = match debug_state {
         DebugMode::Auto { timeout } => *timeout,
-        DebugMode::Manual { .. } => 100, // Shorter polling interval for better responsiveness
+        DebugMode::Manual { .. } => 100,
     };
 
     if !event::poll(Duration::from_millis(timeout_millis))? {
@@ -125,7 +122,6 @@ fn handle_input(debug_state: &mut DebugMode) -> std::io::Result<ControlFlow<()>>
     }
 }
 
-// Drawing functions remain similar but with proper error handling
 fn draw_debug_header(count: &usize, stdout: &mut std::io::Stdout) -> std::io::Result<()> {
     write!(stdout, "URM Debugger (step {})\r\n", count)?;
     stdout.queue(PrintStyledContent(
@@ -174,7 +170,6 @@ fn draw_current_instruction(
     let start = (pc as i32 - context - 1).max(0) as usize;
     let end = (pc + context as usize).min(program.statements.len());
 
-    // write!(stdout, "Instructions:\r\n")?;
     stdout.queue(PrintStyledContent("Instructions:\r\n".grey()))?;
 
     for (i, statement) in program.statements[start..end].iter().enumerate() {
@@ -199,7 +194,6 @@ fn draw_tooltip(stdout: &mut std::io::Stdout, debug_state: &DebugMode) -> std::i
 
     match debug_state {
         DebugMode::Auto { timeout } => {
-            // Auto mode tooltip
             stdout.queue(PrintStyledContent(
                 format!(
                     "Auto mode [speed: {} instructions/s ({} ms/instruction)]\n\r",
@@ -218,7 +212,6 @@ fn draw_tooltip(stdout: &mut std::io::Stdout, debug_state: &DebugMode) -> std::i
             ))?;
         }
         DebugMode::Manual { .. } => {
-            // Manual mode tooltip
             stdout.queue(PrintStyledContent("Manual Mode\r\n".green()))?;
 
             stdout.queue(PrintStyledContent(
