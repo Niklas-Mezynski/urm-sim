@@ -1,19 +1,21 @@
 # URM Simulator in Rust
 
+[![Crates.io](https://img.shields.io/crates/v/urm-sim.svg)](https://crates.io/crates/urm-sim)
+
 A simulator for Unlimited Register Machine (URM) programs, implemented in Rust.
 
 ## Installation
 
-Build the binary:
+Install the CLI using Cargo:
 
 ```sh
-cargo build --release
+cargo install urm-sim
 ```
 
 ## Usage
 
 ```sh
-./target/release/urm-sim-rust [--debug] <FILE> <INPUTS...>
+urm-sim [--debug] <FILE> <INPUTS...>
 ```
 
 Arguments:
@@ -58,13 +60,13 @@ out(R1)
 Run the addition program:
 
 ```sh
-urm-sim-rust urm-programs/add.urm 5 3
+urm-sim urm-programs/add.urm 5 3
 ```
 
 Debug mode:
 
 ```sh
-urm-sim-rust urm-programs/add.urm 5 3 --debug
+urm-sim urm-programs/add.urm 5 3 --debug
 ```
 
 ## License
