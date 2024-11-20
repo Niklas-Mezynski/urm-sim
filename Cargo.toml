@@ -1,7 +1,26 @@
 [package]
-name = "urm-sim-rust"
-version = "0.1.0"
+name = "urm-sim"
+version = "1.0.0"
 edition = "2021"
+description = "A parser and interpreter for Unlimited Register Machine (URM) programs"
+license = "MIT"
+repository = "https://github.com/Niklas-Mezynski/urm-sim"
+homepage = "https://github.com/Niklas-Mezynski/urm-sim"
+documentation = "https://docs.rs/urm-sim"
+readme = "README.md"
+keywords = [
+    "urm",
+    "interpreter",
+    "simulator",
+    "theoretical-cs",
+    "computation",
+    "unlimited-register-machine",
+]
+categories = [
+    "command-line-utilities",
+    "development-tools",
+    "parser-implementations",
+]
 
 [dependencies]
 pest = "2.7.14"
