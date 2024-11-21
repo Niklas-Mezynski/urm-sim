@@ -24,37 +24,21 @@ pub enum DebugMode {
 }
 
 pub struct DebuggerState {
-    program: Program,
-    registers: IndexMap<String, usize>,
-    pc: usize,
     debug_mode: DebugMode,
     instruction_count: usize,
     last_execution: Instant,
 }
 
 impl DebuggerState {
-    fn new(program: Program) -> Self {
-        let mut registers = IndexMap::new();
-        let mut pc = 1;
-
-        Self {
-            program,
-            registers,
-            pc,
-            debug_mode: DebugMode::Manual { step: false },
-            instruction_count: 1,
-            last_execution: Instant::now(),
-        }
-    }
-
-    fn execute_next_instruction(&mut self) -> bool {
-        execute_statement(
-            &self.program.statements[self.pc - 1],
-            &mut self.registers,
-            &mut self.pc,
-        );
+    fn execute_next_instruction(
+        &mut self,
+        program: &Program,
+        registers: &mut IndexMap<String, usize>,
+        pc: &mut usize,
+    ) -> bool {
+        execute_statement(&program.statements[*pc - 1], registers, pc);
         self.instruction_count += 1;
-        self.pc > self.program.statements.len()
+        *pc > program.statements.len()
     }
 }
 
@@ -72,9 +56,6 @@ pub fn run_with_debug(
 
     // State management
     let mut debugger_state = DebuggerState {
-        program: program.clone(),
-        registers: registers.clone(),
-        pc: *pc,
         debug_mode: DebugMode::Manual { step: false },
         instruction_count: 1,
         last_execution: Instant::now(),
@@ -83,14 +64,14 @@ pub fn run_with_debug(
     // Main loop
     loop {
         // Render the UI
-        terminal.draw(|frame| ui(frame, &debugger_state))?;
+        terminal.draw(|frame| ui(frame, &debugger_state, program, registers, pc))?;
 
         // Handle debug mode execution
         match debugger_state.debug_mode {
             DebugMode::Auto { timeout } => {
                 if debugger_state.last_execution.elapsed() >= Duration::from_millis(timeout) {
                     debugger_state.last_execution = Instant::now();
-                    if debugger_state.execute_next_instruction() {
+                    if debugger_state.execute_next_instruction(program, registers, pc) {
                         break;
                     }
                 }
@@ -98,7 +79,7 @@ pub fn run_with_debug(
             DebugMode::Manual { step } => {
                 if step {
                     debugger_state.debug_mode = DebugMode::Manual { step: false };
-                    if debugger_state.execute_next_instruction() {
+                    if debugger_state.execute_next_instruction(program, registers, pc) {
                         break;
                     }
                 }
@@ -115,15 +96,16 @@ pub fn run_with_debug(
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
 
-    // Update original references
-    *registers = debugger_state.registers;
-    *pc = debugger_state.pc;
-
     Ok(())
 }
 
 fn handle_input(state: &mut DebuggerState) -> io::Result<bool> {
-    if !event::poll(Duration::from_millis(100))? {
+    let timeout_millis = match state.debug_mode {
+        DebugMode::Auto { timeout } => timeout,
+        DebugMode::Manual { .. } => 100,
+    };
+
+    if !event::poll(Duration::from_millis(timeout_millis))? {
         return Ok(false);
     }
 
@@ -144,7 +126,13 @@ fn handle_input(state: &mut DebuggerState) -> io::Result<bool> {
     Ok(false)
 }
 
-fn ui(frame: &mut Frame, state: &DebuggerState) {
+fn ui(
+    frame: &mut Frame,
+    state: &DebuggerState,
+    program: &Program,
+    registers: &IndexMap<String, usize>,
+    pc: &usize,
+) {
     let layout = Layout::new(
         Direction::Vertical,
         [
@@ -153,7 +141,7 @@ fn ui(frame: &mut Frame, state: &DebuggerState) {
             Constraint::Length(5), // Footer/Controls
         ],
     )
-    .split(frame.size());
+    .split(frame.area());
 
     // Header
     let header = Paragraph::new(format!("URM Debugger (step {})", state.instruction_count))
@@ -169,16 +157,15 @@ fn ui(frame: &mut Frame, state: &DebuggerState) {
     let content_layout = Layout::new(
         Direction::Horizontal,
         [
-            Constraint::Percentage(50), // Registers
-            Constraint::Percentage(50), // Instructions
+            Constraint::Percentage(40), // Registers
+            Constraint::Percentage(60), // Instructions
         ],
     )
     .split(layout[1]);
 
     // Registers
     let registers_block = Block::default().title("Registers").borders(Borders::ALL);
-    let registers_content: Vec<Line> = state
-        .registers
+    let registers_content: Vec<Line> = registers
         .iter()
         .map(|(reg, val)| Line::from(format!("{} = {}", reg, val)))
         .collect();
@@ -190,18 +177,19 @@ fn ui(frame: &mut Frame, state: &DebuggerState) {
     // Instructions
     let instructions_block = Block::default().title("Instructions").borders(Borders::ALL);
 
-    let context = 2;
-    let start = (state.pc as i32 - context - 1).max(0) as usize;
-    let end = (state.pc + context as usize).min(state.program.statements.len());
+    let available_rows = content_layout[0].as_size();
+    let context: i32 = (available_rows.height as i32 - 2) / 2;
+    let start = (*pc as i32 - context - 1).max(0) as usize;
+    let end = (*pc + context as usize).min(program.statements.len());
 
-    let instruction_content: Vec<Line> = state.program.statements[start..end]
+    let instruction_content: Vec<Line> = program.statements[start..end]
         .iter()
         .enumerate()
         .map(|(i, statement)| {
             let instr_number = start + i + 1;
             let instr_str = statement.to_string(instr_number);
 
-            if instr_number == state.pc {
+            if instr_number == *pc {
                 Line::from(format!("-> {}", instr_str)).style(
                     Style::default()
                         .fg(Color::Green)

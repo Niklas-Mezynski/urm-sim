@@ -7,7 +7,7 @@ use crate::instructions::*;
 
 pub fn simulate_urm(program: &Program, input: Vec<usize>, debug: bool) -> usize {
     // Run static analysis
-    match run_static_analysis(program, input.clone()) {
+    match run_static_analysis(program, &input) {
         Ok(_) => {}
         Err(e) => {
             // This should never happen, as the parser should catch these errors
@@ -108,7 +108,7 @@ pub fn execute_statement(
     }
 }
 
-pub fn run_static_analysis(program: &Program, input: Vec<usize>) -> Result<(), String> {
+pub fn run_static_analysis(program: &Program, input: &Vec<usize>) -> Result<(), String> {
     // Check if input registers are unique
     if program.input_registers.len() != program.input_registers.iter().collect::<HashSet<_>>().len()
     {

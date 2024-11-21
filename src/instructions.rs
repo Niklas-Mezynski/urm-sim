@@ -1,10 +1,10 @@
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Condition {
     Equal,
     NotEqual,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Statement {
     ConditionalGoto {
         register: String,
@@ -52,7 +52,7 @@ impl Statement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Program {
     pub input_registers: Vec<String>,
     pub statements: Vec<Statement>,
