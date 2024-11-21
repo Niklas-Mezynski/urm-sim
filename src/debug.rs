@@ -157,8 +157,8 @@ fn ui(
     let content_layout = Layout::new(
         Direction::Horizontal,
         [
-            Constraint::Percentage(40), // Registers
-            Constraint::Percentage(60), // Instructions
+            Constraint::Percentage(30), // Registers
+            Constraint::Percentage(70), // Instructions
         ],
     )
     .split(layout[1]);
@@ -167,7 +167,9 @@ fn ui(
     let registers_block = Block::default().title("Registers").borders(Borders::ALL);
     let registers_content: Vec<Line> = registers
         .iter()
-        .map(|(reg, val)| Line::from(format!("{} = {}", reg, val)))
+        .map(|(reg, val)| {
+            Line::from(format!("{} = {}", reg, val)).style(Style::default().fg(Color::Blue))
+        })
         .collect();
     let registers_paragraph = Paragraph::new(registers_content)
         .block(registers_block)
@@ -201,19 +203,27 @@ fn ui(
         })
         .collect();
 
-    let instructions_paragraph = Paragraph::new(instruction_content)
-        .block(instructions_block)
-        .wrap(Wrap { trim: true });
+    let instructions_paragraph = Paragraph::new(instruction_content).block(instructions_block);
     frame.render_widget(instructions_paragraph, content_layout[1]);
 
     // Footer/Controls
     let controls_text = match state.debug_mode {
-        DebugMode::Auto { timeout } => format!(
-            "Mode: Auto (Speed: {:.2} inst/s) | 'm': Manual | '↓'/'j': Slower | '↑'/'k': Faster",
-            1000.0 / timeout as f64
-        ),
+        DebugMode::Auto { timeout } => vec![
+            Line::from(vec![
+                Span::raw("Mode: "),
+                Span::styled("Auto", Style::default().bold().green()),
+                Span::raw(format!(" (Speed: {:.2} inst/s)", 1000.0 / timeout as f64)),
+            ]),
+            Line::from("'m': Switch to Manual Mode | '↓'/'j': Slower | '↑'/'k': Faster"),
+        ],
         DebugMode::Manual { .. } => {
-            "Mode: Manual | 'm': Auto | 'Space': Next Instruction".to_string()
+            vec![
+                Line::from(vec![
+                    Span::raw("Mode: "),
+                    Span::styled("Manual", Style::default().bold().gray()),
+                ]),
+                Line::from("'m': Switch to Auto Mode | 'Space': Next Instruction"),
+            ]
         }
     };
 
