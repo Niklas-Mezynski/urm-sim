@@ -1,15 +1,19 @@
 use crate::{instructions::Program, simulator::execute_statement};
 use crossterm::{
-    cursor,
     event::{self, Event, KeyCode, KeyEventKind},
     execute,
-    style::{PrintStyledContent, Stylize},
-    terminal::{self, disable_raw_mode, enable_raw_mode, Clear, ClearType},
-    QueueableCommand,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use indexmap::IndexMap;
-use std::io::Write;
-use std::{io::stdout, ops::ControlFlow, time::Duration};
+use ratatui::{
+    prelude::*,
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, Paragraph, Wrap},
+};
+use std::{
+    io,
+    time::{Duration, Instant},
+};
 
 const DEFAULT_TIMEOUT_MILLIS: u64 = 2000;
 
@@ -19,215 +23,214 @@ pub enum DebugMode {
     Manual { step: bool },
 }
 
+pub struct DebuggerState {
+    debug_mode: DebugMode,
+    instruction_count: usize,
+    last_execution: Instant,
+}
+
+impl DebuggerState {
+    fn execute_next_instruction(
+        &mut self,
+        program: &Program,
+        registers: &mut IndexMap<String, usize>,
+        pc: &mut usize,
+    ) -> bool {
+        execute_statement(&program.statements[*pc - 1], registers, pc);
+        self.instruction_count += 1;
+        *pc > program.statements.len()
+    }
+}
+
 pub fn run_with_debug(
     program: &Program,
     registers: &mut IndexMap<String, usize>,
     pc: &mut usize,
-) -> std::io::Result<()> {
-    let mut count = 1;
-    let mut last_execution = std::time::Instant::now();
-    let mut debug_state = DebugMode::Manual { step: false };
-
-    // Raw mode to handle key presses immediately
+) -> io::Result<()> {
+    // Terminal setup
     enable_raw_mode()?;
-    let mut stdout = stdout();
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
 
-    // Use alternate screen buffer to avoid corrupting the main terminal
-    execute!(
-        stdout,
-        terminal::EnterAlternateScreen,
-        cursor::Hide,
-        Clear(ClearType::All)
-    )?;
+    // State management
+    let mut debugger_state = DebuggerState {
+        debug_mode: DebugMode::Manual { step: false },
+        instruction_count: 1,
+        last_execution: Instant::now(),
+    };
 
+    // Main loop
     loop {
-        // Buffer all drawing operations
-        stdout
-            .queue(cursor::MoveTo(0, 0))?
-            .queue(Clear(ClearType::All))?;
+        // Render the UI
+        terminal.draw(|frame| ui(frame, &debugger_state, program, registers, pc))?;
 
-        draw_debug_header(&count, &mut stdout)?;
-        draw_registers_state(registers, &mut stdout)?;
-        draw_current_instruction(program, *pc, &mut stdout)?;
-        draw_tooltip(&mut stdout, &debug_state)?;
-
-        // Flush all buffered operations at once
-        stdout.flush()?;
-
-        match debug_state {
+        // Handle debug mode execution
+        match debugger_state.debug_mode {
             DebugMode::Auto { timeout } => {
-                if last_execution.elapsed() >= Duration::from_millis(timeout) {
-                    last_execution = std::time::Instant::now();
-                    if let ControlFlow::Break(_) =
-                        execute_next_statement(program, pc, registers, &mut count)
-                    {
+                if debugger_state.last_execution.elapsed() >= Duration::from_millis(timeout) {
+                    debugger_state.last_execution = Instant::now();
+                    if debugger_state.execute_next_instruction(program, registers, pc) {
                         break;
                     }
                 }
             }
             DebugMode::Manual { step } => {
                 if step {
-                    debug_state = DebugMode::Manual { step: false };
-                    if let ControlFlow::Break(_) =
-                        execute_next_statement(program, pc, registers, &mut count)
-                    {
+                    debugger_state.debug_mode = DebugMode::Manual { step: false };
+                    if debugger_state.execute_next_instruction(program, registers, pc) {
                         break;
                     }
                 }
             }
         }
 
-        if let ControlFlow::Break(_) = handle_input(&mut debug_state)? {
+        // Handle input
+        if handle_input(&mut debugger_state)? {
             break;
         }
     }
 
     // Cleanup
-    execute!(stdout, cursor::Show, terminal::LeaveAlternateScreen)?;
     disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
 
     Ok(())
 }
 
-fn handle_input(debug_state: &mut DebugMode) -> std::io::Result<ControlFlow<()>> {
-    let timeout_millis = match debug_state {
-        DebugMode::Auto { timeout } => *timeout,
+fn handle_input(state: &mut DebuggerState) -> io::Result<bool> {
+    let timeout_millis = match state.debug_mode {
+        DebugMode::Auto { timeout } => timeout,
         DebugMode::Manual { .. } => 100,
     };
 
     if !event::poll(Duration::from_millis(timeout_millis))? {
-        return Ok(ControlFlow::Continue(()));
+        return Ok(false);
     }
 
     if let Event::Key(key_event) = event::read()? {
-        // Only handle key press events, ignore releases
         if key_event.kind == KeyEventKind::Press {
             match key_event.code {
-                KeyCode::Esc => Ok(ControlFlow::Break(())),
+                KeyCode::Esc | KeyCode::Char('q') => return Ok(true),
                 KeyCode::Char('c')
                     if key_event.modifiers.contains(event::KeyModifiers::CONTROL) =>
                 {
-                    Ok(ControlFlow::Break(()))
+                    return Ok(true)
                 }
-                code => {
-                    debug_state.handle_key(code);
-                    Ok(ControlFlow::Continue(()))
-                }
+                code => state.debug_mode.handle_key(code),
             }
-        } else {
-            Ok(ControlFlow::Continue(()))
         }
-    } else {
-        Ok(ControlFlow::Continue(()))
     }
+
+    Ok(false)
 }
 
-fn draw_debug_header(count: &usize, stdout: &mut std::io::Stdout) -> std::io::Result<()> {
-    write!(stdout, "URM Debugger (step {})\r\n", count)?;
-    stdout.queue(PrintStyledContent(
-        "=======================\r\n\r\n".to_string().grey(),
-    ))?;
-    Ok(())
-}
-
-fn execute_next_statement(
+fn ui(
+    frame: &mut Frame,
+    state: &DebuggerState,
     program: &Program,
-    pc: &mut usize,
-    registers: &mut IndexMap<String, usize>,
-    count: &mut usize,
-) -> ControlFlow<()> {
-    execute_statement(&program.statements[*pc - 1], registers, pc);
-    *count += 1;
-
-    if *pc > program.statements.len() {
-        return ControlFlow::Break(());
-    }
-    ControlFlow::Continue(())
-}
-
-fn draw_registers_state(
     registers: &IndexMap<String, usize>,
-    stdout: &mut std::io::Stdout,
-) -> std::io::Result<()> {
-    stdout.queue(PrintStyledContent("Registers:\r\n".grey()))?;
+    pc: &usize,
+) {
+    let layout = Layout::new(
+        Direction::Vertical,
+        [
+            Constraint::Length(3), // Header
+            Constraint::Min(10),   // Main content
+            Constraint::Length(5), // Footer/Controls
+        ],
+    )
+    .split(frame.area());
 
-    for (reg, val) in registers {
-        stdout.queue(PrintStyledContent(format!("{} = {}\r\n", reg, val).blue()))?;
-    }
+    // Header
+    let header = Paragraph::new(format!("URM Debugger (step {})", state.instruction_count))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
+        .block(Block::default().borders(Borders::BOTTOM));
+    frame.render_widget(header, layout[0]);
 
-    stdout.queue(PrintStyledContent("\r\n".grey()))?;
+    // Main content (split into two columns)
+    let content_layout = Layout::new(
+        Direction::Horizontal,
+        [
+            Constraint::Percentage(30), // Registers
+            Constraint::Percentage(70), // Instructions
+        ],
+    )
+    .split(layout[1]);
 
-    Ok(())
-}
+    // Registers
+    let registers_block = Block::default().title("Registers").borders(Borders::ALL);
+    let registers_content: Vec<Line> = registers
+        .iter()
+        .map(|(reg, val)| {
+            Line::from(format!("{} = {}", reg, val)).style(Style::default().fg(Color::Blue))
+        })
+        .collect();
+    let registers_paragraph = Paragraph::new(registers_content)
+        .block(registers_block)
+        .wrap(Wrap { trim: true });
+    frame.render_widget(registers_paragraph, content_layout[0]);
 
-fn draw_current_instruction(
-    program: &Program,
-    pc: usize,
-    stdout: &mut std::io::Stdout,
-) -> std::io::Result<()> {
-    // Context of instructions around current program counter
-    let context = 2;
-    let start = (pc as i32 - context - 1).max(0) as usize;
-    let end = (pc + context as usize).min(program.statements.len());
+    // Instructions
+    let instructions_block = Block::default().title("Instructions").borders(Borders::ALL);
 
-    stdout.queue(PrintStyledContent("Instructions:\r\n".grey()))?;
+    let available_rows = content_layout[0].as_size();
+    let context: i32 = (available_rows.height as i32 - 2) / 2;
+    let start = (*pc as i32 - context - 1).max(0) as usize;
+    let end = (*pc + context as usize).min(program.statements.len());
 
-    for (i, statement) in program.statements[start..end].iter().enumerate() {
-        let instr_number = start + i + 1;
-        let instr_str = statement.to_string(instr_number);
+    let instruction_content: Vec<Line> = program.statements[start..end]
+        .iter()
+        .enumerate()
+        .map(|(i, statement)| {
+            let instr_number = start + i + 1;
+            let instr_str = statement.to_string(instr_number);
 
-        if instr_number == pc {
-            // Highlight current instruction
-            stdout.queue(PrintStyledContent(format!("-> {}\r\n", instr_str).blue()))?;
-        } else {
-            stdout.queue(PrintStyledContent(format!("   {}\r\n", instr_str).grey()))?;
-        }
-    }
-
-    stdout.queue(PrintStyledContent("\r\n".white()))?;
-
-    Ok(())
-}
-
-fn draw_tooltip(stdout: &mut std::io::Stdout, debug_state: &DebugMode) -> std::io::Result<()> {
-    stdout.queue(PrintStyledContent("Controls: ".grey()))?;
-
-    match debug_state {
-        DebugMode::Auto { timeout } => {
-            stdout.queue(PrintStyledContent(
-                format!(
-                    "Auto mode [speed: {} instructions/s ({} ms/instruction)]\n\r",
-                    // Round to max 2 decimal places
-                    (1000_f64 / (*timeout as f64) * 100.0).round() / 100.0,
-                    timeout
+            if instr_number == *pc {
+                Line::from(format!("-> {}", instr_str)).style(
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
                 )
-                .green(),
-            ))?;
+            } else {
+                Line::from(format!("   {}", instr_str))
+            }
+        })
+        .collect();
 
-            stdout.queue(PrintStyledContent(
-                "- 'm': Switch to Manual Mode\r\n\
-                 - '↓'/'j': Decrease Speed\r\n\
-                 - '↑'/'k': Increase Speed\r\n"
-                    .grey(),
-            ))?;
-        }
+    let instructions_paragraph = Paragraph::new(instruction_content).block(instructions_block);
+    frame.render_widget(instructions_paragraph, content_layout[1]);
+
+    // Footer/Controls
+    let controls_text = match state.debug_mode {
+        DebugMode::Auto { timeout } => vec![
+            Line::from(vec![
+                Span::raw("Mode: "),
+                Span::styled("Auto", Style::default().bold().green()),
+                Span::raw(format!(" (Speed: {:.2} inst/s)", 1000.0 / timeout as f64)),
+            ]),
+            Line::from("'m': Switch to Manual Mode | '↓'/'j': Slower | '↑'/'k': Faster"),
+        ],
         DebugMode::Manual { .. } => {
-            stdout.queue(PrintStyledContent("Manual Mode\r\n".green()))?;
-
-            stdout.queue(PrintStyledContent(
-                "- 'm': Switch to Auto Mode\r\n\
-                 - 'Space': Execute Next Instruction\r\n"
-                    .grey(),
-            ))?;
+            vec![
+                Line::from(vec![
+                    Span::raw("Mode: "),
+                    Span::styled("Manual", Style::default().bold().gray()),
+                ]),
+                Line::from("'m': Switch to Auto Mode | 'Space': Next Instruction"),
+            ]
         }
-    }
+    };
 
-    // Common controls
-    stdout.queue(PrintStyledContent(
-        "- 'Esc'/'Ctrl+c': Exit Debugger\r\n".grey(),
-    ))?;
-
-    Ok(())
+    let controls = Paragraph::new(controls_text)
+        .style(Style::default().fg(Color::Yellow))
+        .block(Block::default().borders(Borders::TOP));
+    frame.render_widget(controls, layout[2]);
 }
 
 impl DebugMode {
@@ -238,18 +241,14 @@ impl DebugMode {
                 // Decrease speed (increase timeout)
                 KeyCode::Char('j') | KeyCode::Down => {
                     let multiplier = f64::log10(*timeout as f64).floor() as u64;
-
                     let scaling = u64::pow(10, multiplier as u32);
-
                     *timeout = timeout.saturating_add(scaling).min(100000);
                 }
                 // Increase speed (decrease timeout)
                 KeyCode::Char('k') | KeyCode::Up => {
                     let multiplier =
                         f64::log10(*timeout as f64 - f64::log10(*timeout as f64)).floor() as u64;
-
                     let scaling = u64::pow(10, multiplier as u32);
-
                     *timeout = timeout.saturating_sub(scaling).max(1);
                 }
                 _ => {}
