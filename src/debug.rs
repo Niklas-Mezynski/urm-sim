@@ -212,7 +212,11 @@ fn ui(
             Line::from(vec![
                 Span::raw("Mode: "),
                 Span::styled("Auto", Style::default().bold().green()),
-                Span::raw(format!(" (Speed: {:.2} inst/s)", 1000.0 / timeout as f64)),
+                Span::raw(format!(
+                    " [speed: {} inst/s ({} ms/inst)]", // Round to max 2 decimal places
+                    (1000_f64 / (timeout as f64) * 100.0).round() / 100.0,
+                    timeout
+                )),
             ]),
             Line::from("'m': Switch to Manual Mode | '↓'/'j': Slower | '↑'/'k': Faster"),
         ],

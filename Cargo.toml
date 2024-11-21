@@ -1,6 +1,6 @@
 [package]
 name = "urm-sim"
-version = "1.1.0"
+version = "1.1.1"
 edition = "2021"
 description = "A parser and interpreter for Unlimited Register Machine (URM) programs"
 license = "MIT"
